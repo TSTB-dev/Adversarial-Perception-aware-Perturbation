@@ -1,4 +1,4 @@
-python src/generate_dataset.py \
+accelerate launch src/generate_dataset.py \
     --generation_type img2img \
     --inversion_type ddim \
     --num_samples 1 \
@@ -13,7 +13,7 @@ python src/generate_dataset.py \
     --image_size 256 \
     --device cuda \
     --output_dir output \
-    --batch_size 8 \
+    --batch_size 256 \
     --new_dataset_name pets_ddim_n50_p20_s3.5 \
 
     # parser.add_argument("--generation_type", type=str, default="img2img", help="Type of generation: img2img or img2txt")

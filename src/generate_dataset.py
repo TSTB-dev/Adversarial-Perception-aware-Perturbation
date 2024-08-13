@@ -4,18 +4,21 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import argparse
 from pathlib import Path
 
+import time
 import random
 import numpy as np
 import torch
 import cv2
 import h5py
 from tqdm.auto import tqdm
+from accelerate import PartialState
 from torch.utils.data import DataLoader
 from torchvision import transforms as tfms
 from diffusers import StableDiffusionPipeline, DDIMScheduler
+import warnings
+warnings.filterwarnings("ignore")
 
 from dataset import PetsDataset
-
 from sampling import ddim_sampling
 
 def get_diffusion_pipe(model_name, device):    
@@ -28,43 +31,48 @@ def postprocess(images, image_size):
     images = [cv2.resize(img, (image_size, image_size)) for img in images]
     return images
     
-def save_to_hdf5(hdf5_path, img_path, cls, img, split, compression="gzip"):
-    with h5py.File(hdf5_path, "w") as f:
-        filename = img_path.split("/")[-1]  
-        clsname = filename.split("_")[0]
-        save_path = f"{split}/{cls}/{filename}"
-        f.create_dataset(save_path, data=img, compression=compression)
+def save_to_hdf5(hdf5_path, img_path, cls, img, split, compression="gzip", n_trials=10, n_sleep=1):
+    for i in range(n_trials):
+        try:
+            with h5py.File(hdf5_path, "w") as f:
+                filename = img_path.split("/")[-1]  
+                clsname = filename.split("_")[0]
+                save_path = f"{split}/{cls}/{filename}"
+                f.create_dataset(save_path, data=img, compression=compression)
+                
+                f[save_path].attrs["label"] = cls
+                f[save_path].attrs["filename"] = filename
+                f[save_path].attrs["class"] = clsname
+                break
+        except BlockingIOError:
+            time.sleep(n_sleep)
         
-        f[save_path].attrs["label"] = cls
-        f[save_path].attrs["filename"] = filename
-        f[save_path].attrs["class"] = clsname
-        
-def generate(dataloader, pipe, args, hdf5_path, split, prompt=""):
+def generate(distributed_state, dataloader, pipe, args, hdf5_path, split, prompt=""):
     for i, batch in tqdm(enumerate(dataloader)):
         images = batch["image"].to(args.device)
-        paths = batch["path"]
-        labels = batch["label"]
+        paths = np.array(batch["path"])
+        labels = np.array(batch["label"])
+        with distributed_state.split_between_processes(list(range(len(images)))) as idxs:
+            samples = ddim_sampling(
+                pipe=pipe,
+                images=images[idxs],
+                prompt=prompt,
+                num_inference_steps=args.num_steps,
+                device=args.device,
+                num_samples=args.num_samples,
+                ddim_sampling_step=args.ddim_sampling_step,
+                guidance_scale=args.guidance_scale,
+                do_classifier_free_guidance=True,
+                negative_prompt="",
+                prefix=f"[{split}] {i}/{len(dataloader)}",
+            )  # (B, H, W, C)
         
-        samples = ddim_sampling(
-            pipe=pipe,
-            images=images,
-            prompt=prompt,
-            num_inference_steps=args.num_steps,
-            device=args.device,
-            num_samples=args.num_samples,
-            ddim_sampling_step=args.ddim_sampling_step,
-            guidance_scale=args.guidance_scale,
-            do_classifier_free_guidance=True,
-            negative_prompt="",
-            prefix=f"[{split}] {i}/{len(dataloader)}",
-        )  # (B, H, W, C)
-        
-        samples = postprocess(samples, args.image_size)
-        # save random image
-        sample = samples[0]
-        cv2.imwrite(f"debug_{split}.jpg", sample)
-        for j, img in enumerate(samples):
-            save_to_hdf5(hdf5_path, paths[j], labels[j], img, split)
+            samples = postprocess(samples, args.image_size)
+            # save random image
+            # sample = samples[0]
+            # cv2.imwrite(f"debug_{split}.jpg", sample)
+            for j, img in enumerate(samples):
+                save_to_hdf5(hdf5_path, paths[idxs][j], labels[idxs][j], img, split)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -97,6 +105,10 @@ def main():
     parser.add_argument("--output_dir", type=str, default="output", help="Directory to save generated samples")
     
     args = parser.parse_args()
+    
+    # setup distributed inference
+    distributed_state = PartialState()  # this automatically sets up distributed inference
+    args.device = distributed_state.device 
     
     # create output directory
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
@@ -150,10 +162,10 @@ def main():
     if args.generation_type == "img2img":
         if args.inversion_type == "ddim":
             prompt = "" if args.empty_prompt else NotImplementedError("Prompt is not empty")
-            generate(train_dataloader, pipe, args, hdf5_path, split="train", prompt=prompt)
+            generate(distributed_state, train_dataloader, pipe, args, hdf5_path, split="train", prompt=prompt)
 
             if args.with_test:
-                generate(test_dataloader, pipe, args, hdf5_path, split="test", prompt=prompt)
+                generate(distributed_state, test_dataloader, pipe, args, hdf5_path, split="test", prompt=prompt)
         else:
             raise NotImplementedError(f"Invalid inversion type: {args.inversion_type}")
     else:
