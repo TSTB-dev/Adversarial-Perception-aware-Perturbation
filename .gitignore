@@ -1,6 +1,7 @@
 data/
 wandb/
 output/
+syn_data/
 
 
 # Byte-compiled / optimized / DLL files

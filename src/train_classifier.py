@@ -16,8 +16,10 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 import torchvision
+from torchvision import transforms as tfms
 
-from dataset import PetsDataset
+from dataset import PetsDataset, PetsDatasetLMDB, StanfordCarsDataset, StanfordCarsDatasetLMDB, \
+    Flowers102Dataset, Flowers102DatasetLMDB, Caltech101Dataset, Caltech101DatasetLMDB
 from models import get_model
 from validate import validate
 
@@ -44,7 +46,16 @@ def main():
     parser.add_argument("--wandb_project", type=str, default="apap")
     parser.add_argument("--wandb_run_name", type=str, default="apap-pets-real-resnet50")
     parser.add_argument("--save_model", action="store_true", default=False)
+    parser.add_argument("--save_freq", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--eval_only", action="store_true", default=False)
+    parser.add_argument("--model_path", type=str, default=None)
+    parser.add_argument("--save_best_model", action="store_true", default=False)
+    
+    # synthetic dataset
+    parser.add_argument("--syn_dataset", action="store_true", default=False)
+    parser.add_argument("--syn_data_path", type=str, default="./data")
+    parser.add_argument("--eval_on_real", action="store_true", default=False)
     
     args = parser.parse_args()
     
@@ -59,22 +70,87 @@ def main():
     
     # dataset 
     dataset_config = {
-        "root": args.data_path,
-        "download": True,
+        "root": args.data_path if not args.syn_dataset else args.syn_data_path,
+        "download": False,
         "transform": None,
         "train": True,
     }
     if args.dataset == "pets":
-        pets_transform = torchvision.transforms.Compose(
+        pets_transform = tfms.Compose(
             [
-                torchvision.transforms.Resize((args.image_size, args.image_size)),
-                torchvision.transforms.ToTensor(),
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+                tfms.RandomHorizontalFlip(p=0.5),
+                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
             ]
         )
         dataset_config["transform"] = pets_transform
-        train_dataset = PetsDataset(**dataset_config)
+        train_dataset = PetsDataset(**dataset_config) if not args.syn_dataset else PetsDatasetLMDB(**dataset_config)
         dataset_config["train"] = False
-        val_dataset = PetsDataset(**dataset_config)        
+        dataset_config["transform"] = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+            ]
+        )
+        val_dataset = PetsDataset(**dataset_config) if not args.syn_dataset else PetsDatasetLMDB(**dataset_config)
+    elif args.dataset == "cars":
+        cars_transform = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+                tfms.RandomHorizontalFlip(p=0.5),
+                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
+            ]
+        )
+        dataset_config["transform"] = cars_transform
+        train_dataset = StanfordCarsDataset(**dataset_config) if not args.syn_dataset else StanfordCarsDatasetLMDB(**dataset_config)
+        dataset_config["train"] = False
+        dataset_config["transform"] = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+            ]
+        )
+        val_dataset = StanfordCarsDataset(**dataset_config) if not args.syn_dataset else StanfordCarsDatasetLMDB(**dataset_config)
+    elif args.dataset == "flowers":
+        flowers_transform = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+                tfms.RandomHorizontalFlip(p=0.5),
+                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
+            ]
+        )
+        dataset_config["transform"] = flowers_transform
+        train_dataset = Flowers102Dataset(**dataset_config) if not args.syn_dataset else Flowers102DatasetLMDB(**dataset_config)
+        dataset_config["train"] = False
+        dataset_config["transform"] = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+            ]
+        )
+        val_dataset = Flowers102Dataset(**dataset_config) if not args.syn_dataset else Flowers102DatasetLMDB(**dataset_config)
+    elif args.dataset == "caltech":
+        caltech_transform = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+                tfms.RandomHorizontalFlip(p=0.5),
+                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
+            ]
+        )
+        dataset_config["transform"] = caltech_transform
+        train_dataset = Caltech101Dataset(**dataset_config) if not args.syn_dataset else Caltech101DatasetLMDB(**dataset_config)
+        dataset_config["train"] = False
+        dataset_config["transform"] = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+            ]
+        )
+        val_dataset = Caltech101Dataset(**dataset_config) if not args.syn_dataset else Caltech101DatasetLMDB(**dataset_config)
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
     
@@ -82,7 +158,7 @@ def main():
         train_dataset, args.batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
     val_dataloader = DataLoader(
-        val_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True
+        val_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False
     )
     
     # model
@@ -90,6 +166,15 @@ def main():
 
     model = model.cuda()
     logging.info(f"Model: {model}")
+    if args.model_path is not None:
+        logging.info(f"Load model from {args.model_path}")
+        model.load_state_dict(torch.load(args.model_path))
+    
+    if args.eval_only:
+        logging.info("Start evaluation")
+        val_stats = validate(model, val_dataloader, 0, args)
+        logging.info(f"val_loss: {val_stats['loss']}, val_acc: {val_stats['acc']}")
+        return    
     
     # optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -103,13 +188,24 @@ def main():
     # logging
     wandb.init(project=args.wandb_project, name=args.wandb_run_name, config=config)
     
+    logging.info(f"Number of training samples: {len(train_dataset)}")
     logging.info(f"Start training for {args.epochs} epochs")
+    current_acc_max_idx = 0
+    current_acc_max = 0
     for i in range(1, args.epochs + 1):
         train_stats = train_one_epoch(model, train_dataloader, optimizer, scheduler, i, args)
+        logging.info(f"[Epoch {i}] train_loss: {train_stats['loss']}")
         
         if i % 10 == 0:
             val_stats = validate(model, val_dataloader, i, args)
+            current_acc_max_idx = i if current_acc_max < val_stats["acc"] else current_acc_max
             logging.info(f"[Epoch {i}] val_loss: {val_stats['loss']}, val_acc: {val_stats['acc']}")
+        
+        if args.save_freq is not None and i % args.save_freq == 0:
+            save_dir = os.path.join(wandb.run.dir, "models")
+            Path(save_dir).mkdir(parents=True, exist_ok=True)   
+            logging.info(f"Save model to {save_dir}")
+            torch.save(model.state_dict(), os.path.join(save_dir, f"classifier_{i}.pth"))
     
     logging.info(f"Overall Training finished")
     
@@ -118,6 +214,18 @@ def main():
         Path(save_dir).mkdir(parents=True, exist_ok=True)   
         logging.info(f"Save model to {save_dir}")
         torch.save(model.state_dict(), os.path.join(save_dir, "classifier.pth"))
+        
+        if args.save_best_model:
+            logging.info(f"Save best model to {save_dir}")
+            torch.save(model.state_dict(), os.path.join(save_dir, f"best_classifier_{current_acc_max_idx}.pth"))
+    
+    if args.eval_on_real:
+        logging.info(f"Start evaluation on real dataset")
+        real_dataset = PetsDataset(args.data_path, train=False, transform=val_dataset.transform)
+        real_dataloader = DataLoader(real_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False)
+        val_stats = validate(model, real_dataloader, args.epochs + 1, args)
+        logging.info(f"[Real] val_loss: {val_stats['loss']}, val_acc: {val_stats['acc']}")
+        logging.info(f"Finish evaluation on real dataset")
     
     wandb.finish()
         

@@ -1,3 +1,7 @@
+"""
+Generate synthetic dataset.
+"""
+
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -14,16 +18,20 @@ from tqdm.auto import tqdm
 from accelerate import PartialState
 from torch.utils.data import DataLoader
 from torchvision import transforms as tfms
-from diffusers import StableDiffusionPipeline, DDIMScheduler
+from diffusers import StableDiffusionPipeline, DDIMScheduler, StableUnCLIPImg2ImgPipeline
 import warnings
+from PIL import Image
 warnings.filterwarnings("ignore")
 
-from dataset import PetsDataset
-from sampling import ddim_sampling
+from dataset import PetsDataset, StanfordCarsDataset, Flowers102Dataset, Caltech101Dataset
+from sampling import ddim_sampling, unclip_sampling
 
 def get_diffusion_pipe(model_name, device):    
     print(f"Loading model: {model_name}")
-    pipe = StableDiffusionPipeline.from_pretrained(model_name).to(device)
+    if model_name == "runwayml/stable-diffusion-v1-5":
+        pipe = StableDiffusionPipeline.from_pretrained(model_name).to(device)
+    elif model_name == "stabilityai/stable-diffusion-2-1-unclip":
+        pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_name, torch_dtype=torch.float16).to(device)
     return pipe
 
 def postprocess(images, image_size):
@@ -31,52 +39,83 @@ def postprocess(images, image_size):
     images = [cv2.resize(img, (image_size, image_size)) for img in images]
     return images
     
-def save_to_hdf5(hdf5_path, img_path, cls, img, split, compression="gzip", n_trials=10, n_sleep=1):
+def save_to_hdf5(hdf5_path, img_path, cls, img, split, sample_idx, compression="gzip", n_trials=10, n_sleep=1):
+    success = False
     for i in range(n_trials):
         try:
-            with h5py.File(hdf5_path, "w") as f:
+            with h5py.File(hdf5_path, "a") as f:
                 filename = img_path.split("/")[-1]  
                 clsname = filename.split("_")[0]
-                save_path = f"{split}/{cls}/{filename}"
+                save_path = f"{split}/{cls}/{filename}/{sample_idx}"
                 f.create_dataset(save_path, data=img, compression=compression)
                 
                 f[save_path].attrs["label"] = cls
                 f[save_path].attrs["filename"] = filename
                 f[save_path].attrs["class"] = clsname
+                f[save_path].attrs["path_real"] = str(img_path)
+                success = True
                 break
         except BlockingIOError:
             time.sleep(n_sleep)
+    assert success, f"Failed to save {img_path} to {hdf5_path}"
         
 def generate(distributed_state, dataloader, pipe, args, hdf5_path, split, prompt=""):
+    num_process = distributed_state.num_processes
+    assert args.batch_size % num_process == 0, "Batch size should be divisible by the number of processes"
+    
     for i, batch in tqdm(enumerate(dataloader)):
-        images = batch["image"].to(args.device)
+        assert args.batch_size % num_process == 0, "Batch size should be divisible by the number of processes"
+        batch_size_on_node = args.batch_size // num_process
+        
+        images = batch["image"].pixel_values[0]
         paths = np.array(batch["path"])
         labels = np.array(batch["label"])
         with distributed_state.split_between_processes(list(range(len(images)))) as idxs:
-            samples = ddim_sampling(
-                pipe=pipe,
-                images=images[idxs],
-                prompt=prompt,
-                num_inference_steps=args.num_steps,
-                device=args.device,
-                num_samples=args.num_samples,
-                ddim_sampling_step=args.ddim_sampling_step,
-                guidance_scale=args.guidance_scale,
-                do_classifier_free_guidance=True,
-                negative_prompt="",
-                prefix=f"[{split}] {i}/{len(dataloader)}",
-            )  # (B, H, W, C)
+            assert len(idxs) == batch_size_on_node, f"Batch size on node: {len(idxs)} should be equal to {batch_size_on_node}"
+            current_process_id = distributed_state.process_index
+            print(f"Current process => [{current_process_id}/{num_process}], Split: {split}, Batch: {i}/{len(dataloader)}")
+            if args.generation_type == "ddim":
+                samples = ddim_sampling(
+                    pipe=pipe,
+                    images=images[idxs],
+                    prompt=prompt,
+                    num_inference_steps=args.num_steps,
+                    device=args.device,
+                    num_samples=args.num_samples,
+                    ddim_sampling_step=args.ddim_sampling_step,
+                    guidance_scale=args.guidance_scale,
+                    do_classifier_free_guidance=True,
+                    negative_prompt="",
+                    prefix=f"[{split}] {i}/{len(dataloader)}",
+                )  # (B, H, W, C)
         
-            samples = postprocess(samples, args.image_size)
-            # save random image
+                samples = postprocess(samples, args.image_size)
+            elif args.generation_type == "unclip":
+                samples = unclip_sampling(
+                    pipe=pipe,
+                    images=images[idxs],
+                    prompt=prompt,
+                    num_inference_steps=args.num_steps,
+                    batch_size=batch_size_on_node,
+                    device=args.device,
+                    num_samples=args.num_samples,
+                    guidance_scale=args.guidance_scale,
+                    noise_level=0,
+                    output_type="image",
+                    prefix=f"[{split}] {i}/{len(dataloader)}",
+                )
+                samples = postprocess(samples, args.image_size)
             # sample = samples[0]
-            # cv2.imwrite(f"debug_{split}.jpg", sample)
+            # import matplotlib.pyplot as plt
+            # plt.imsave(f"recon_{split}_{i}.png", sample)
             for j, img in enumerate(samples):
-                save_to_hdf5(hdf5_path, paths[idxs][j], labels[idxs][j], img, split)
+                img_idx = j // args.num_samples
+                sample_idx = j % args.num_samples
+                save_to_hdf5(hdf5_path, paths[idxs][img_idx], labels[idxs][img_idx], img, split, sample_idx)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--generation_type", type=str, default="img2img", help="Type of generation: img2img or img2txt")
+    parser.add_argument("--generation_type", type=str, default="ddim", help="Type of generation: ddim, unclip, or txt2img")
     parser.add_argument("--inversion_type", type=str, default="ddim", help="Type of inversion: ddim or diffusion")
     parser.add_argument("--num_samples", type=int, default=1, help="Number of samples to generate per real image or caption")
     
@@ -111,55 +150,101 @@ def main():
     args.device = distributed_state.device 
     
     # create output directory
+    if not os.path.exists(args.output_dir): print(f"Creating output directory: {args.output_dir}")
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    if Path(args.output_dir).exists():
-        print(f"Output directory {args.output_dir} already exists. It will be overwritten.")
     
     # set random seed
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    # np.random.seed(args.seed)
+    # random.seed(args.seed)
+    # torch.manual_seed(args.seed)
     config = vars(args)
     print(f"Config: {config}")
-    
-    dataset_config = {
-        "root": args.data_path,
-        "download": True,
-        "transform": None,
-        "train": True,
-    }
-    if args.dataset == "pets":
-        pets_transform = tfms.Compose(
-            [
-                tfms.transforms.Resize((args.image_size, args.image_size)),
-                tfms.transforms.ToTensor(),
-            ]
-        )
-        dataset_config["transform"] = pets_transform
-        train_dataset = PetsDataset(**dataset_config)
-        dataset_config["train"] = False
-        val_dataset = PetsDataset(**dataset_config)
-    else:
-        raise ValueError(f"Invalid dataset: {args.dataset}")
-    
-    train_dataloader = DataLoader(
-        train_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False
-    )
-    test_dataloader = DataLoader(
-        val_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=False
-    )
-    
-    classes = train_dataset.classes
-    print(f"Classes: {classes}")
-    hdf5_path = os.path.join(args.output_dir, f"{args.new_dataset_name}.hdf5")
     
     pipe = get_diffusion_pipe(args.model_name, args.device)
     if args.inversion_type == "ddim":
         pipe.scheduler = DDIMScheduler.from_config(
-            pipe.scheduler.config
+            pipe.scheduler.config, rescale_betas_zero_snr=True, timestep_spacing="trailing"
         )
     
-    if args.generation_type == "img2img":
+    dataset_config = {
+        "root": args.data_path,
+        "download": False,
+        "transform": None,
+        "train": True,
+    }
+    if args.dataset == "pets":
+        if args.generation_type == "ddim":
+            pets_transform = tfms.Compose(
+                [
+                    tfms.transforms.Resize((args.image_size, args.image_size)),
+                    tfms.transforms.ToTensor(),
+                ]
+            )
+        else:
+            pets_transform = pipe.feature_extractor
+        dataset_config["transform"] = pets_transform
+        train_dataset = PetsDataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = PetsDataset(**dataset_config)
+    elif args.dataset == "cars":
+        if args.generation_type == "ddim":
+            cars_transform = tfms.Compose(
+                [
+                    tfms.transforms.Resize((args.image_size, args.image_size)),
+                    tfms.transforms.ToTensor(),
+                ]
+            )
+        else:
+            cars_transform = pipe.feature_extractor
+        dataset_config["transform"] = cars_transform
+        train_dataset = StanfordCarsDataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = StanfordCarsDataset(**dataset_config)
+    elif args.dataset == "flowers":
+        if args.generation_type == "ddim":
+            flowers_transform = tfms.Compose(
+                [
+                    tfms.transforms.Resize((args.image_size, args.image_size)),
+                    tfms.transforms.ToTensor(),
+                ]
+            )
+        else:
+            flowers_transform = pipe.feature_extractor
+        dataset_config["transform"] = flowers_transform
+        train_dataset = Flowers102Dataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = Flowers102Dataset(**dataset_config)
+    elif args.dataset == "caltech":
+        if args.generation_type == "ddim":
+            caltech_transform = tfms.Compose(
+                [
+                    tfms.transforms.Resize((args.image_size, args.image_size)),
+                    tfms.transforms.ToTensor(),
+                ]
+            )
+        else:
+            caltech_transform = pipe.feature_extractor
+        dataset_config["transform"] = caltech_transform
+        train_dataset = Caltech101Dataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = Caltech101Dataset(**dataset_config)
+    else:
+        raise ValueError(f"Invalid dataset: {args.dataset}")
+    
+    train_dataloader = DataLoader(
+        train_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=True
+    )
+    test_dataloader = DataLoader(
+        val_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=True
+    )
+    print(f"Drop last {len(train_dataset)% args.batch_size} samples from the dataloader")
+    
+    
+    classes = train_dataset.classes
+    print(f"Classes: {classes}")
+    hdf5_path = os.path.join(args.output_dir, f"{args.generation_type}_{args.new_dataset_name}.hdf5")
+    
+    if args.generation_type == "ddim":
         if args.inversion_type == "ddim":
             prompt = "" if args.empty_prompt else NotImplementedError("Prompt is not empty")
             generate(distributed_state, train_dataloader, pipe, args, hdf5_path, split="train", prompt=prompt)
@@ -168,6 +253,10 @@ def main():
                 generate(distributed_state, test_dataloader, pipe, args, hdf5_path, split="test", prompt=prompt)
         else:
             raise NotImplementedError(f"Invalid inversion type: {args.inversion_type}")
+    elif args.generation_type == "unclip":
+        generate(distributed_state, train_dataloader, pipe, args, hdf5_path, split="train")
+        if args.with_test:
+            generate(distributed_state, test_dataloader, pipe, args, hdf5_path, split="test")
     else:
         raise NotImplementedError(f"Invalid generation type: {args.generation_type}")
     

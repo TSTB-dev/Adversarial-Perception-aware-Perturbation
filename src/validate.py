@@ -12,10 +12,9 @@ def validate(
 ):
     model.eval()
     loss_meter = LogMeter()
-    acc_meter = LogMeter()
     loss_meter.reset()
-    acc_meter.reset()
     
+    results = []
     for i, batch in enumerate(dataloader):
         imgs, labels = batch["image"], batch["label"]
         imgs = imgs.cuda()
@@ -23,20 +22,22 @@ def validate(
         with torch.inference_mode():
             preds = model(imgs)
             loss = nn.CrossEntropyLoss()(preds, labels)
-        
+        pred_labels = preds.argmax(1)        
+        results.append(pred_labels == labels)
         loss_meter.update(loss.item())
-        acc_meter.update((preds.argmax(1) == labels).float().mean().item())
-        
-    wandb.log(
-        {"val/loss": loss_meter.avg, 
-            "val/acc": acc_meter.avg
-        }
-    )
-    print(f"(Validation) [Epoch {epoch}] loss: {loss_meter.avg} acc: {acc_meter.avg}")
+    acc = torch.cat(results).float().mean().item()
+    
+    if not args.eval_only:
+        wandb.log(
+            {"val/loss": loss_meter.avg, 
+                "val/acc": acc
+            }
+        ) 
+    print(f"(Validation) [Epoch {epoch}] loss: {loss_meter.avg} acc: {acc}")
     
     return {
         "loss": loss_meter.avg,
-        "acc": acc_meter.avg
+        "acc": acc
     }
 
         
