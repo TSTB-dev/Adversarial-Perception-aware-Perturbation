@@ -3,6 +3,7 @@ wandb/
 output/
 syn_data/
 syn_models/
+.env
 
 
 # Byte-compiled / optimized / DLL files
