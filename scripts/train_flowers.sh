@@ -20,17 +20,16 @@
     # parser.add_argument("--model_path", type=str, default=None)
     # parser.add_argument("--save_best_model", action="store_true", default=False)
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=1
 python src/train_classifier.py \
     --model_name resnet18 \
-    --syn_data_path /home/haselab/projects/sakai/Adversarial-Perception-aware-Perturbation/syn_data/unclip_flowers_unclip_s10_n20_x2.hdf5 \
-    --syn_dataset \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_flowers_synx1_ep500.pth \
     --dataset flowers \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
     --image_channel 3 \
-    --epochs 500 \
+    --epochs 250 \
     --optimzier adam \
     --lr 5e-4 \
     --weight_decay 0 \
@@ -40,18 +39,17 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name flowers-synx2-resnet18 \
+    --wandb_run_name flowers-sym2real-synx1-resnet18
 
 python src/train_classifier.py \
     --model_name resnet18 \
-    --syn_data_path /home/haselab/projects/sakai/Adversarial-Perception-aware-Perturbation/syn_data/unclip_flowers_unclip_s10_n20_x4.hdf5 \
-    --syn_dataset \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_flowers_synx2_ep500.pth \
     --dataset flowers \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
     --image_channel 3 \
-    --epochs 500 \
+    --epochs 250 \
     --optimzier adam \
     --lr 5e-4 \
     --weight_decay 0 \
@@ -61,18 +59,17 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name flowers-synx4-resnet18 \
+    --wandb_run_name flowers-sym2real-synx2-resnet18
 
 python src/train_classifier.py \
     --model_name resnet18 \
-    --syn_data_path /home/haselab/projects/sakai/Adversarial-Perception-aware-Perturbation/syn_data/unclip_flowers_unclip_s10_n20_x8.hdf5 \
-    --syn_dataset \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_flowers_synx4_ep500.pth \
     --dataset flowers \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
     --image_channel 3 \
-    --epochs 500 \
+    --epochs 250 \
     --optimzier adam \
     --lr 5e-4 \
     --weight_decay 0 \
@@ -82,4 +79,24 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name flowers-synx8-resnet18 \
+    --wandb_run_name flowers-sym2real-synx4-resnet18
+
+python src/train_classifier.py \
+    --model_name resnet18 \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_flowers_synx8_ep500.pth \
+    --dataset flowers \
+    --data_path ./data \
+    --batch_size 64 \
+    --image_size 256 \
+    --image_channel 3 \
+    --epochs 250 \
+    --optimzier adam \
+    --lr 5e-4 \
+    --weight_decay 0 \
+    --save_model \
+    --save_freq 500 \
+    --save_best_model \
+    --scheduler cosine \
+    --scheduler_epochs 200 \
+    --wandb_project unclip \
+    --wandb_run_name flowers-sym2real-synx8-resnet18

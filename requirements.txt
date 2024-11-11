@@ -1,0 +1,21 @@
+# --index-url https://download.pytorch.org/whl/cu124
+torch
+torchvision
+torchaudio
+opencv-python
+h5py
+tqdm
+accelerate
+diffusers
+wandb
+scikit-learn
+pandas
+kaggle
+matplotlib
+jupyter
+nvitop
+gdown
+transformers
+timm
+openai==1.43.0
+python-dotenv

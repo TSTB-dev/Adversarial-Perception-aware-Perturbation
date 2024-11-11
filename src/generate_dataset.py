@@ -172,7 +172,7 @@ def main():
         "transform": None,
         "train": True,
     }
-    if args.dataset == "pets":
+    if "pets" in args.dataset:
         if args.generation_type == "ddim":
             pets_transform = tfms.Compose(
                 [
@@ -186,7 +186,7 @@ def main():
         train_dataset = PetsDataset(**dataset_config)
         dataset_config["train"] = False
         val_dataset = PetsDataset(**dataset_config)
-    elif args.dataset == "cars":
+    elif "cars" in args.dataset:
         if args.generation_type == "ddim":
             cars_transform = tfms.Compose(
                 [
@@ -200,7 +200,7 @@ def main():
         train_dataset = StanfordCarsDataset(**dataset_config)
         dataset_config["train"] = False
         val_dataset = StanfordCarsDataset(**dataset_config)
-    elif args.dataset == "flowers":
+    elif "flowers" in args.dataset:
         if args.generation_type == "ddim":
             flowers_transform = tfms.Compose(
                 [
@@ -214,7 +214,7 @@ def main():
         train_dataset = Flowers102Dataset(**dataset_config)
         dataset_config["train"] = False
         val_dataset = Flowers102Dataset(**dataset_config)
-    elif args.dataset == "caltech":
+    elif "caltech" in args.dataset:
         if args.generation_type == "ddim":
             caltech_transform = tfms.Compose(
                 [

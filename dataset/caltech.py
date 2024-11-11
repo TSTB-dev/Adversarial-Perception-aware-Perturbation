@@ -12,12 +12,10 @@ class Caltech101Dataset(Dataset):
         self.root = os.path.join(root, datasetname)
         self.transform = transform
         self.train = train
-
-        if download:
-            self.download()
+        self.download = download
 
         # Use torchvision's Caltech101 dataset class
-        self.dataset = datasets.Caltech101(root=root, target_type='category', transform=None, download=False)
+        self.dataset = datasets.Caltech101(root=root, target_type='category', transform=None, download=download)
         print(f"Number of samples in dataset: {len(self.dataset)}")
         # Set the classes and number of classes
         self.classes = self.dataset.categories
@@ -33,14 +31,6 @@ class Caltech101Dataset(Dataset):
         else:
             self.data_paths = self.val_paths
             self.data_labels = self.val_labels
-
-    def download(self):
-        # Download using torchvision's download mechanism
-        if os.path.exists(self.root):
-            print("Dataset already downloaded")
-            return
-        datasets.Caltech101(root=self.root, download=True)
-        print("Dataset downloaded successfully")
 
     def split_data_by_class(self):
         paths = []

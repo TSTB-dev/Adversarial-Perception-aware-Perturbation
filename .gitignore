@@ -2,6 +2,7 @@ data/
 wandb/
 output/
 syn_data/
+syn_models/
 
 
 # Byte-compiled / optimized / DLL files

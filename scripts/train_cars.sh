@@ -3,8 +3,8 @@
 export CUDA_VISIBLE_DEVICES=0
 python src/train_classifier.py \
     --model_name resnet18 \
-    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_pets_synx1_ep500.pth \
-    --dataset pets \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_cars_synx1_ep500.pth \
+    --dataset cars \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
@@ -19,12 +19,12 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name pets-sym2real-synx1-resnet18
+    --wandb_run_name cars-sym2real-synx1-resnet18
 
 python src/train_classifier.py \
     --model_name resnet18 \
-    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_pets_synx2_ep500.pth \
-    --dataset pets \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_cars_synx2_ep500.pth \
+    --dataset cars \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
@@ -39,12 +39,12 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name pets-sym2real-synx2-resnet18
+    --wandb_run_name cars-sym2real-synx2-resnet18
 
 python src/train_classifier.py \
     --model_name resnet18 \
-    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_pets_synx4_ep500.pth \
-    --dataset pets \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_cars_synx4_ep500.pth \
+    --dataset cars \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
@@ -59,12 +59,12 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name pets-sym2real-synx4-resnet18
+    --wandb_run_name cars-sym2real-synx4-resnet18
 
 python src/train_classifier.py \
     --model_name resnet18 \
-    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_pets_synx8_ep500.pth \
-    --dataset pets \
+    --model_path /home/haselab/projects/Adversarial-Perception-aware-Perturbation/syn_models/classifier_rn18_cars_synx8_ep500.pth \
+    --dataset cars \
     --data_path ./data \
     --batch_size 64 \
     --image_size 256 \
@@ -79,4 +79,4 @@ python src/train_classifier.py \
     --scheduler cosine \
     --scheduler_epochs 200 \
     --wandb_project unclip \
-    --wandb_run_name pets-sym2real-synx8-resnet18
+    --wandb_run_name cars-sym2real-synx8-resnet18

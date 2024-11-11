@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=1,2,3,4,5 # ,2,3,4,5
+export CUDA_VISIBLE_DEVICES=0,1,2,3 # ,2,3,4,5
 accelerate launch src/generate_dataset.py \
     --generation_type unclip \
     --inversion_type ddim \
@@ -8,68 +8,68 @@ accelerate launch src/generate_dataset.py \
     --ddim_sampling_step 20 \
     --guidance_scale 10 \
     --empty_prompt \
-    --dataset caltech \
+    --dataset caltech101 \
     --data_path data \
     --with_test \
     --image_size 256 \
     --device cuda \
     --output_dir syn_data \
-    --batch_size 60 \
+    --batch_size 64 \
     --new_dataset_name caltech_unclip_s10_n20_x1 \
 
-accelerate launch src/generate_dataset.py \
-    --generation_type unclip \
-    --inversion_type ddim \
-    --num_samples 2 \
-    --model_name stabilityai/stable-diffusion-2-1-unclip \
-    --num_steps 20 \
-    --ddim_sampling_step 20 \
-    --guidance_scale 10 \
-    --empty_prompt \
-    --dataset caltech \
-    --data_path data \
-    --with_test \
-    --image_size 256 \
-    --device cuda \
-    --output_dir syn_data \
-    --batch_size 30 \
-    --new_dataset_name caltech_unclip_s10_n20_x2 \
+# accelerate launch src/generate_dataset.py \
+#     --generation_type unclip \
+#     --inversion_type ddim \
+#     --num_samples 2 \
+#     --model_name stabilityai/stable-diffusion-2-1-unclip \
+#     --num_steps 20 \
+#     --ddim_sampling_step 20 \
+#     --guidance_scale 10 \
+#     --empty_prompt \
+#     --dataset caltech \
+#     --data_path data \
+#     --with_test \
+#     --image_size 256 \
+#     --device cuda \
+#     --output_dir syn_data \
+#     --batch_size 30 \
+#     --new_dataset_name caltech_unclip_s10_n20_x2 \
 
-accelerate launch src/generate_dataset.py \
-    --generation_type unclip \
-    --inversion_type ddim \
-    --num_samples 4 \
-    --model_name stabilityai/stable-diffusion-2-1-unclip \
-    --num_steps 20 \
-    --ddim_sampling_step 20 \
-    --guidance_scale 10 \
-    --empty_prompt \
-    --dataset caltech \
-    --data_path data \
-    --with_test \
-    --image_size 256 \
-    --device cuda \
-    --output_dir syn_data \
-    --batch_size 15 \
-    --new_dataset_name caltech_unclip_s10_n20_x4 \
+# accelerate launch src/generate_dataset.py \
+#     --generation_type unclip \
+#     --inversion_type ddim \
+#     --num_samples 4 \
+#     --model_name stabilityai/stable-diffusion-2-1-unclip \
+#     --num_steps 20 \
+#     --ddim_sampling_step 20 \
+#     --guidance_scale 10 \
+#     --empty_prompt \
+#     --dataset caltech \
+#     --data_path data \
+#     --with_test \
+#     --image_size 256 \
+#     --device cuda \
+#     --output_dir syn_data \
+#     --batch_size 15 \
+#     --new_dataset_name caltech_unclip_s10_n20_x4 \
 
-accelerate launch src/generate_dataset.py \
-    --generation_type unclip \
-    --inversion_type ddim \
-    --num_samples 8 \
-    --model_name stabilityai/stable-diffusion-2-1-unclip \
-    --num_steps 20 \
-    --ddim_sampling_step 20 \
-    --guidance_scale 10 \
-    --empty_prompt \
-    --dataset caltech \
-    --data_path data \
-    --with_test \
-    --image_size 256 \
-    --device cuda \
-    --output_dir syn_data \
-    --batch_size 10 \
-    --new_dataset_name caltech_unclip_s10_n20_x8 \
+# accelerate launch src/generate_dataset.py \
+#     --generation_type unclip \
+#     --inversion_type ddim \
+#     --num_samples 8 \
+#     --model_name stabilityai/stable-diffusion-2-1-unclip \
+#     --num_steps 20 \
+#     --ddim_sampling_step 20 \
+#     --guidance_scale 10 \
+#     --empty_prompt \
+#     --dataset caltech \
+#     --data_path data \
+#     --with_test \
+#     --image_size 256 \
+#     --device cuda \
+#     --output_dir syn_data \
+#     --batch_size 10 \
+#     --new_dataset_name caltech_unclip_s10_n20_x8 \
 
     # parser.add_argument("--generation_type", type=str, default="img2img", help="Type of generation: img2img or img2txt")
     # parser.add_argument("--inversion_type", type=str, default="ddim", help="Type of inversion: ddim or diffusion")

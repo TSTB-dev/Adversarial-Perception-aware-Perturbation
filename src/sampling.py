@@ -5,6 +5,7 @@ import numpy as np
 
 from sampling_functions import encode, sample, invert, \
     encode_image, encode_prompt, prepare_latents
+from llm import generate_captions
 
 def ddim_sampling(
     pipe,
@@ -132,6 +133,26 @@ def unclip_sampling(
     images = images.cpu().detach()
     images = pipe.image_processor.postprocess(images, output_type=output_type)
     return images  # (B, C, H, W)
+
+# def clscaptoin_sampling(
+#     pipe,
+#     clsname: str,
+#     num_inference_steps: int,
+#     batch_size: int,
+#     device: str,
+#     num_samples: int=1,
+#     guidance_scale: float=3.5,
+#     llm_type: str=""
+#     output_type: str="image",
+#     prefix="",
+#     height: int=None,
+#     width: int=None,
+# ) -> np.ndarray:
+#     # Generate captions from classname
+#     generate_captions(
+        
+#     )
+    
     
     
     

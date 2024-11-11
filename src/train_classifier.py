@@ -14,12 +14,13 @@ from pathlib import Path
 import random
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import torchvision
 from torchvision import transforms as tfms
 
 from dataset import PetsDataset, PetsDatasetLMDB, StanfordCarsDataset, StanfordCarsDatasetLMDB, \
     Flowers102Dataset, Flowers102DatasetLMDB, Caltech101Dataset, Caltech101DatasetLMDB
+from dataset import build_dataset
 from models import get_model
 from validate import validate
 
@@ -56,6 +57,7 @@ def main():
     parser.add_argument("--syn_dataset", action="store_true", default=False)
     parser.add_argument("--syn_data_path", type=str, default="./data")
     parser.add_argument("--eval_on_real", action="store_true", default=False)
+    parser.add_argument("--train_mode", type=str, default="syn2real")  # syn2real, mix
     
     args = parser.parse_args()
     
@@ -75,84 +77,7 @@ def main():
         "transform": None,
         "train": True,
     }
-    if args.dataset == "pets":
-        pets_transform = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-                tfms.RandomHorizontalFlip(p=0.5),
-                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
-            ]
-        )
-        dataset_config["transform"] = pets_transform
-        train_dataset = PetsDataset(**dataset_config) if not args.syn_dataset else PetsDatasetLMDB(**dataset_config)
-        dataset_config["train"] = False
-        dataset_config["transform"] = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-            ]
-        )
-        val_dataset = PetsDataset(**dataset_config) if not args.syn_dataset else PetsDatasetLMDB(**dataset_config)
-    elif args.dataset == "cars":
-        cars_transform = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-                tfms.RandomHorizontalFlip(p=0.5),
-                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
-            ]
-        )
-        dataset_config["transform"] = cars_transform
-        train_dataset = StanfordCarsDataset(**dataset_config) if not args.syn_dataset else StanfordCarsDatasetLMDB(**dataset_config)
-        dataset_config["train"] = False
-        dataset_config["transform"] = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-            ]
-        )
-        val_dataset = StanfordCarsDataset(**dataset_config) if not args.syn_dataset else StanfordCarsDatasetLMDB(**dataset_config)
-    elif args.dataset == "flowers":
-        flowers_transform = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-                tfms.RandomHorizontalFlip(p=0.5),
-                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
-            ]
-        )
-        dataset_config["transform"] = flowers_transform
-        train_dataset = Flowers102Dataset(**dataset_config) if not args.syn_dataset else Flowers102DatasetLMDB(**dataset_config)
-        dataset_config["train"] = False
-        dataset_config["transform"] = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-            ]
-        )
-        val_dataset = Flowers102Dataset(**dataset_config) if not args.syn_dataset else Flowers102DatasetLMDB(**dataset_config)
-    elif args.dataset == "caltech":
-        caltech_transform = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-                tfms.RandomHorizontalFlip(p=0.5),
-                tfms.RandomRotation(degrees=[0.0, 360.0], interpolation=tfms.InterpolationMode.NEAREST, expand=False, fill=0),
-            ]
-        )
-        dataset_config["transform"] = caltech_transform
-        train_dataset = Caltech101Dataset(**dataset_config) if not args.syn_dataset else Caltech101DatasetLMDB(**dataset_config)
-        dataset_config["train"] = False
-        dataset_config["transform"] = tfms.Compose(
-            [
-                tfms.Resize((args.image_size, args.image_size)),
-                tfms.ToTensor(),
-            ]
-        )
-        val_dataset = Caltech101Dataset(**dataset_config) if not args.syn_dataset else Caltech101DatasetLMDB(**dataset_config)
-    else:
-        raise ValueError(f"Invalid dataset: {args.dataset}")
+    train_dataset, val_dataset = build_dataset(dataset_config, args)
     
     train_dataloader = DataLoader(
         train_dataset, args.batch_size, shuffle=True, num_workers=4, pin_memory=True
