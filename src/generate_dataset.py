@@ -23,8 +23,8 @@ import warnings
 from PIL import Image
 warnings.filterwarnings("ignore")
 
-from dataset import PetsDataset, StanfordCarsDataset, Flowers102Dataset, Caltech101Dataset
-from sampling import ddim_sampling, unclip_sampling
+from dataset import PetsDataset, StanfordCarsDataset, Flowers102Dataset, Caltech101Dataset, STL10Dataset
+from sampling import ddim_sampling, unclip_sampling, text_sampling
 
 def get_diffusion_pipe(model_name, device):    
     print(f"Loading model: {model_name}")
@@ -59,8 +59,8 @@ def save_to_hdf5(hdf5_path, img_path, cls, img, split, sample_idx, compression="
             time.sleep(n_sleep)
     assert success, f"Failed to save {img_path} to {hdf5_path}"
         
-def generate(distributed_state, dataloader, pipe, args, hdf5_path, split, prompt=""):
-    num_process = distributed_state.num_processes
+def generate(dist, dataloader, pipe, args, hdf5_path, split, prompt=""):
+    num_process = dist.num_processes
     assert args.batch_size % num_process == 0, "Batch size should be divisible by the number of processes"
     
     for i, batch in tqdm(enumerate(dataloader)):
@@ -70,9 +70,10 @@ def generate(distributed_state, dataloader, pipe, args, hdf5_path, split, prompt
         images = batch["image"].pixel_values[0]
         paths = np.array(batch["path"])
         labels = np.array(batch["label"])
-        with distributed_state.split_between_processes(list(range(len(images)))) as idxs:
+        captions = np.array(batch["caption"])
+        with dist.split_between_processes(list(range(len(images)))) as idxs:
             assert len(idxs) == batch_size_on_node, f"Batch size on node: {len(idxs)} should be equal to {batch_size_on_node}"
-            current_process_id = distributed_state.process_index
+            current_process_id = dist.process_index
             print(f"Current process => [{current_process_id}/{num_process}], Split: {split}, Batch: {i}/{len(dataloader)}")
             if args.generation_type == "ddim":
                 samples = ddim_sampling(
@@ -105,9 +106,26 @@ def generate(distributed_state, dataloader, pipe, args, hdf5_path, split, prompt
                     prefix=f"[{split}] {i}/{len(dataloader)}",
                 )
                 samples = postprocess(samples, args.image_size)
-            # sample = samples[0]
-            # import matplotlib.pyplot as plt
-            # plt.imsave(f"recon_{split}_{i}.png", sample)
+            elif args.generation_type == "txt2img":
+                samples = text_sampling(
+                    pipe=pipe,
+                    prompts=captions[idxs],
+                    num_inference_steps=args.num_steps,
+                    batch_size=batch_size_on_node,
+                    device=args.device,
+                    num_samples=args.num_samples,
+                    guidance_scale=args.guidance_scale,
+                    noise_level=0,
+                    output_type="image",
+                    prefix=f"[{split}] {i}/{len(dataloader)}",
+                )
+                samples = postprocess(samples, args.image_size)
+            else:
+                raise NotImplementedError(f"Invalid generation type: {args.generation_type}")
+            sample = samples[0]
+            import matplotlib.pyplot as plt
+            plt.imsave(f"recon_{split}_{i}.png", sample)
+            break
             for j, img in enumerate(samples):
                 img_idx = j // args.num_samples
                 sample_idx = j % args.num_samples
@@ -228,17 +246,30 @@ def main():
         train_dataset = Caltech101Dataset(**dataset_config)
         dataset_config["train"] = False
         val_dataset = Caltech101Dataset(**dataset_config)
+    elif "stl" in args.dataset:
+        if args.generation_type == "ddim":
+            stl_transform = tfms.Compose(
+                [
+                    tfms.transforms.Resize((args.image_size, args.image_size)),
+                    tfms.transforms.ToTensor(),
+                ]
+            )
+        else:
+            stl_transform = pipe.feature_extractor
+        dataset_config["transform"] = stl_transform
+        train_dataset = STL10Dataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = STL10Dataset(**dataset_config)
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")
     
     train_dataloader = DataLoader(
-        train_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=True
+        train_dataset, args.batch_size, shuffle=False, num_workers=1, pin_memory=True, drop_last=True
     )
     test_dataloader = DataLoader(
-        val_dataset, args.batch_size, shuffle=False, num_workers=4, pin_memory=True, drop_last=True
+        val_dataset, args.batch_size, shuffle=False, num_workers=1, pin_memory=True, drop_last=True
     )
     print(f"Drop last {len(train_dataset)% args.batch_size} samples from the dataloader")
-    
     
     classes = train_dataset.classes
     print(f"Classes: {classes}")
@@ -254,6 +285,10 @@ def main():
         else:
             raise NotImplementedError(f"Invalid inversion type: {args.inversion_type}")
     elif args.generation_type == "unclip":
+        generate(distributed_state, train_dataloader, pipe, args, hdf5_path, split="train")
+        if args.with_test:
+            generate(distributed_state, test_dataloader, pipe, args, hdf5_path, split="test")
+    elif args.generation_type == "txt2img":
         generate(distributed_state, train_dataloader, pipe, args, hdf5_path, split="train")
         if args.with_test:
             generate(distributed_state, test_dataloader, pipe, args, hdf5_path, split="test")

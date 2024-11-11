@@ -7,6 +7,8 @@ from sampling_functions import encode, sample, invert, \
     encode_image, encode_prompt, prepare_latents
 from llm import generate_captions
 
+from typing import List
+
 def ddim_sampling(
     pipe,
     images: Tensor,
@@ -133,6 +135,73 @@ def unclip_sampling(
     images = images.cpu().detach()
     images = pipe.image_processor.postprocess(images, output_type=output_type)
     return images  # (B, C, H, W)
+
+def text_sampling(
+    pipe, 
+    prompts: List[str],
+    num_inference_steps: int,
+    batch_size: int,
+    device: str,
+    num_samples: int=1,
+    guidance_scale: float=3.5,
+    noise_level: int = 0,
+    output_type: str="image",
+    prefix="",
+    height: int=None,
+    width: int=None,   
+):
+    do_classifier_free_guidance = guidance_scale > 0.0
+    height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
+    width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+    
+    prompt_embeds, uncond_prompt_embeds = encode_prompt(pipe, prompts, batch_size, device, num_samples, do_classifier_free_guidance)
+    if do_classifier_free_guidance:
+        prompt_embeds = torch.cat([prompt_embeds, uncond_prompt_embeds])
+    
+    # scheduler
+    pipe.scheduler.set_timesteps(num_inference_steps=num_inference_steps, device=device)
+    timesteps = pipe.scheduler.timesteps
+    
+    num_channels_latents = pipe.unet.config.in_channels 
+    latents = prepare_latents(
+        pipe,
+        batch_size*num_samples, 
+        num_channels_latents,
+        height,
+        width,
+        prompt_embeds.dtype,
+        device,
+        latents=None,
+    )
+    
+    print(f"{prefix}: Sampling Images for {num_inference_steps} steps...")
+    for i, t in enumerate(pipe.progress_bar(timesteps)):
+        latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+        latent_model_input = pipe.scheduler.scale_model_input(latent_model_input, t)
+
+        with torch.no_grad():
+            noise_pred = pipe.unet(
+                latent_model_input,
+                t,
+                encoder_hidden_states=prompt_embeds,
+                return_dict=False
+            )[0]
+        
+        if do_classifier_free_guidance:
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+        
+        latents = pipe.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+    
+    if not output_type == "latent":
+        images = pipe.vae.decode(latents / pipe.vae.config.scaling_factor, return_dict=False)[0]
+    else:
+        images = latents
+    
+    images = images.cpu().detach()
+    images = pipe.image_processor.postprocess(images, output_type=output_type)
+    return images  # (B, C, H, W)
+    
 
 # def clscaptoin_sampling(
 #     pipe,

@@ -1,21 +1,38 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3 # ,2,3,4,5
+# set port for deepspeed
+# accelerate launch src/generate_dataset.py \
+#     --generation_type unclip \
+#     --inversion_type ddim \
+#     --num_samples 1 \
+#     --model_name stabilityai/stable-diffusion-2-1-unclip \
+#     --num_steps 20 \
+#     --ddim_sampling_step 20 \
+#     --guidance_scale 10 \
+#     --empty_prompt \
+#     --dataset caltech101 \
+#     --data_path data \
+#     --with_test \
+#     --image_size 256 \
+#     --device cuda \
+#     --output_dir syn_data \
+#     --batch_size 64 \
+#     --new_dataset_name caltech_unclip_s10_n20_x1 \
+
 accelerate launch src/generate_dataset.py \
-    --generation_type unclip \
-    --inversion_type ddim \
+    --generation_type txt2img \
     --num_samples 1 \
     --model_name stabilityai/stable-diffusion-2-1-unclip \
     --num_steps 20 \
-    --ddim_sampling_step 20 \
     --guidance_scale 10 \
-    --empty_prompt \
-    --dataset caltech101 \
+    --dataset stl10 \
     --data_path data \
     --with_test \
-    --image_size 256 \
+    --image_size 96 \
     --device cuda \
     --output_dir syn_data \
     --batch_size 64 \
-    --new_dataset_name caltech_unclip_s10_n20_x1 \
+    --new_dataset_name stl10_classtxi_s10_n20_x1 \
+    --main_process_port 0
 
 # accelerate launch src/generate_dataset.py \
 #     --generation_type unclip \

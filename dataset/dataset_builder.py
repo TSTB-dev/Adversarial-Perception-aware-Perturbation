@@ -1,7 +1,7 @@
 import argparse
 from torchvision import transforms as tfms
 from dataset import PetsDataset, PetsDatasetLMDB, StanfordCarsDataset, StanfordCarsDatasetLMDB, \
-    Flowers102Dataset, Flowers102DatasetLMDB, Caltech101Dataset, Caltech101DatasetLMDB
+    Flowers102Dataset, Flowers102DatasetLMDB, Caltech101Dataset, Caltech101DatasetLMDB, STL10Dataset
 
 def build_dataset(dataset_config: dict, args: argparse.Namespace):
     if args.dataset == "pets":
@@ -83,6 +83,18 @@ def build_dataset(dataset_config: dict, args: argparse.Namespace):
             ]
         )
         val_dataset = Caltech101Dataset(**dataset_config) if not args.syn_dataset else Caltech101DatasetLMDB(**dataset_config)
+        return train_dataset, val_dataset
+    elif args.dataset == "stl":
+        stl_transform = tfms.Compose(
+            [
+                tfms.Resize((args.image_size, args.image_size)),
+                tfms.ToTensor(),
+            ]
+        )
+        dataset_config["transform"] = stl_transform
+        train_dataset = STL10Dataset(**dataset_config)
+        dataset_config["train"] = False
+        val_dataset = STL10Dataset(**dataset_config)
         return train_dataset, val_dataset
     else:
         raise ValueError(f"Invalid dataset: {args.dataset}")

@@ -5,4 +5,5 @@ from .pets import PetsDataset, PetsDatasetLMDB
 from .cars import StanfordCarsDataset, StanfordCarsDatasetLMDB
 from .flowers import Flowers102Dataset, Flowers102DatasetLMDB
 from .caltech import Caltech101Dataset, Caltech101DatasetLMDB
+from .stl import STL10Dataset
 from .dataset_builder import build_dataset
